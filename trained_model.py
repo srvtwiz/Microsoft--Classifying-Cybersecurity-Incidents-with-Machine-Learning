@@ -7,6 +7,7 @@ from sklearn.metrics import precision_score,f1_score,recall_score,classification
 import xgboost as xgb
 
 
+
 data=pd.read_csv("C:/Users/srvik/Desktop/Train.csv")
 data=data.drop(['MitreTechniques','ActionGrouped','ActionGranular','EmailClusterId','ThreatFamily','ResourceType','Roles',
                 'AntispamDirection','SuspicionLevel','Timestamp','LastVerdict'],axis=1)
@@ -27,13 +28,45 @@ numeric_col = X.select_dtypes(include=['float64', 'int64']).columns.tolist()
 categorical_col = X.select_dtypes(include='object').columns.tolist()
 
 # Create transformations for numeric and categorical columns
-preprocessor=ColumnTransformer(transformers=[('num',StandardScaler(),numeric_col),('cat',OneHotEncoder(),categorical_col)])
+preprocessor=ColumnTransformer(transformers=[('num',StandardScaler(),numeric_col),('cat',OneHotEncoder(handle_unknown='ignore'),categorical_col)])
+
+
 
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y_encoded, test_size=0.2, stratify=Y_encoded, random_state=69)
 
-model=xgb.XGBClassifier(n_estimators=200,learning_rate=0.1,random_state=100,n_jobs=-1,max_depth=8)
-model.fit(X_train,Y_train)
 
+# Transform the training and testing data
+X_train_transformed = preprocessor.fit_transform(X_train)
+X_test_transformed = preprocessor.transform(X_test)
+
+
+# Convert the processed data to a DMatrix structure and enable GPU
+dtrain = xgb.DMatrix(X_train_transformed, label=Y_train)
+dtest = xgb.DMatrix(X_test_transformed, label=Y_test)
+
+# Initialize the model with GPU support
+model = xgb.train(
+    params = {
+    'objective': 'multi:softmax',  # Assuming multi-class classification
+    'num_class': len(label_encoder.classes_),  # Number of unique classes
+    'tree_method': 'hist',          # Use histogram-based algorithm
+    'device': 'cuda',               # Set device to GPU (CUDA)
+    'max_depth': 8,
+    'learning_rate': 0.1,
+    'random_state': 100},
+    dtrain=dtrain,
+    num_boost_round=200
+)
+
+# Make predictions using GPU-based DMatrix
+pred1 = model.predict(dtrain)
+pred2 = model.predict(dtest)
+
+# Convert predictions back to integer labels
+pred1 = pred1.astype(int)
+pred2 = pred2.astype(int)
+
+# Metrics function remains the same
 def metrics(actual, predicted):
     acc = accuracy_score(actual, predicted) * 100
     prec = precision_score(actual, predicted, average="macro") * 100
@@ -45,13 +78,68 @@ def metrics(actual, predicted):
         "Values": [acc, prec, recall, macro_f1]
     }).set_index("Metrics")
 
-pred1 =model.predict(X_train)
-pred2 =model.predict(X_test)
+# Evaluate metrics
+train_metrics = metrics(Y_train, pred1)
+test_metrics = metrics(Y_test, pred2)
 
-train_metrics=metrics(Y_train,pred1)
-test_metrics=metrics(Y_test,pred2)
+print(pd.DataFrame({
+    "Training": train_metrics["Values"],
+    "Testing": test_metrics["Values"]
+}).reset_index())
 
-pd.DataFrame({
-    "Training":train_metrics["Values"],
-    "Testing":test_metrics["Values"]
-}).reset_index()
+
+
+
+# Define the parameter grid for hyperparameter tuning
+param_grid = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [6, 8, 10],
+    'learning_rate': [0.01, 0.1, 0.2],
+    'subsample': [0.8, 1.0],
+    'colsample_bytree': [0.8, 1.0],
+    'gamma': [0, 1, 5]
+}
+
+
+
+# Initialize the model with GPU support
+base_model = xgb.XGBClassifier(
+    random_state=100,
+    n_jobs=-1,
+    tree_method='hist',  # Enables GPU
+    device = "cuda"  # Use the first GPU. Adjust if using multiple GPUs.
+)
+
+# Initialize GridSearchCV
+grid_search = GridSearchCV(
+    estimator=base_model,
+    param_grid=param_grid,
+    scoring='f1_macro',
+    cv=5,  # 5-fold cross-validation
+    verbose=3,
+    n_jobs=-1
+)
+
+# Perform the grid search using the transformed training data
+grid_search.fit(X_train_transformed, Y_train)
+
+# Retrieve the best model and parameters
+best_model = grid_search.best_estimator_
+print("Best Parameters:", grid_search.best_params_)
+
+# Train the best model on the entire training set
+best_model.fit(dtrain, Y_train)
+
+# Make predictions
+pred1 = best_model.predict(X_train_transformed)
+pred2 = best_model.predict(X_test_transformed)
+
+# Evaluate metrics
+train_metrics = metrics(Y_train, pred1)
+test_metrics = metrics(Y_test, pred2)
+
+# Display metrics
+print(pd.DataFrame({
+    "Training": train_metrics["Values"],
+    "Testing": test_metrics["Values"]
+}).reset_index())

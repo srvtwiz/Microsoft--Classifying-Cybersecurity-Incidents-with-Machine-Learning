@@ -2,8 +2,9 @@ import pandas as pd
 import numpy as np  
 import matplotlib.pyplot as plt
 import seaborn as sns
-train_data=pd.read_csv('data/GUIDE_Train.csv')
-train_df=train_data.drop(['MitreTechniques','ActionGrouped','ActionGranular','EmailClusterId','ThreatFamily','ResourceType','Roles','AntispamDirection','SuspicionLevel','LastVerdict'],
+data=pd.read_csv("C:/Users/srvik/Desktop/Train.csv")
+
+train_df=data.drop(['MitreTechniques','ActionGrouped','ActionGranular','EmailClusterId','ThreatFamily','ResourceType','Roles','AntispamDirection','SuspicionLevel','LastVerdict'],
   axis=1)
 
 plt.figure(figsize=(8, 5))
@@ -29,7 +30,6 @@ plt.tight_layout()
 plt.show()
 
 
-
 numerical_features = ['IncidentId', 'AlertId', 'OrgId']  # Update with relevant numerical features
 
 # Plot histograms
@@ -42,3 +42,15 @@ for i, feature in enumerate(numerical_features):
 
 plt.tight_layout()
 plt.show()
+
+#heatmap
+numeric_col= data.select_dtypes(include=['float64', 'int64'])
+correlation_matrix = numeric_col.corr()
+print(correlation_matrix)
+plt.figure(figsize=(20, 16))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f')
+plt.title('Correlation Matrix Heatmap')
+plt.show()
+threshold = 0.6
+high_corr = correlation_matrix[correlation_matrix > threshold]
+print(high_corr)
