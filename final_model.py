@@ -141,15 +141,15 @@ pred1 = pred1.astype(int)
 pred2 = pred2.astype(int)
 
 #function for metrics
-def metrics(actual, predicted):
-    acc = accuracy_score(actual, predicted) * 100
-    prec = precision_score(actual, predicted, average="macro") * 100
-    recall = recall_score(actual, predicted, average="macro") * 100
-    macro_f1 = f1_score(actual, predicted, average="macro") * 100
+def metrics(trained, tested):
+    accuracy = accuracy_score(trained, tested) * 100
+    precision = precision_score(trained, tested, average="macro") * 100
+    recall = recall_score(trained, tested, average="macro") * 100
+    f1 = f1_score(trained, tested, average="macro") * 100
 
     return pd.DataFrame({
         "Metrics": ["Accuracy", "Precision", "Recall", "Macro F1"],
-        "Values": [acc, prec, recall, macro_f1]
+        "Values": [accuracy, precision, recall, f1]
     }).set_index("Metrics")
     
     # Evaluate metrics
